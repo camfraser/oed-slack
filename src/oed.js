@@ -27,8 +27,8 @@ To get a complete definition for a word, use the command: \`/oed defn <word>\`
 \`/oed d tor\`
 \`/oed definition tor\`
 `;
-const REDIS_PREFIX = 'oed-slack:';
-const REDIS_TTL = 60 * 60 * 24; // 1 day
+const REDIS_PREFIX = process.env.REDIS_PREFIX || 'oed-slack:';
+const REDIS_TTL = process.env.REDIS_TTL || 60 * 60 * 24;
 
 const OED = {
     bold(value) {
@@ -126,23 +126,21 @@ const OED = {
         if (!pronunciation && lexicalEntry.pronunciations && lexicalEntry.pronunciations.length) {
             pronunciation = lexicalEntry.pronunciations[0]; // eslint-line-disable no-param-reassign
         }
-        let attachment;
+        const attachment = {
+            pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}`,
+            fallback: `${lexicalEntry.text}, ${lexicalEntry.lexicalCategory}`,
+            fields: [],
+            mrkdwn_in: ['pretext', 'fields'],
+        };
         if (pronunciation) {
-            attachment = {
-                pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}, ${OED.italicize(pronunciation.phoneticSpelling)}`,
-                fallback: `${lexicalEntry.text}, ${lexicalEntry.lexicalCategory}, ${pronunciation.phoneticSpelling}`,
-                fields: [],
-                mrkdwn_in: ['pretext', 'fields'],
-                footer: pronunciation.audioFile,
-                footer_icon: AUDIO_ICON,
-            };
-        } else {
-            attachment = {
-                pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}`,
-                fallback: `${lexicalEntry.text}, ${lexicalEntry.lexicalCategory}`,
-                fields: [],
-                mrkdwn_in: ['pretext', 'fields'],
-            };
+            if (pronunciation.audioFile) {
+                attachment.footer = pronunciation.audioFile;
+                attachment.footer_icon = AUDIO_ICON;
+            }
+            if (pronunciation.phoneticSpelling) {
+                attachment.pretext = `${attachment.pretext}, ${OED.italicize(pronunciation.phoneticSpelling)}`;
+                attachment.fallback = `${attachment.fallback}, ${pronunciation.phoneticSpelling}`;
+            }
         }
         for (let e = 0; e < lexicalEntry.entries.length; e++) {
             const entry = lexicalEntry.entries[e];
