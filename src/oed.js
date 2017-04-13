@@ -110,7 +110,7 @@ const OED = {
         return definitions.join('\n');
     },
 
-    parseExamples(example) {
+    parseExample(example) {
         let resp = example.text;
         if (example.registers) {
             resp = `${OED.parseRegisters(example.registers)} ${resp}`;
@@ -157,7 +157,7 @@ const OED = {
                     }
                     let value = '';
                     if (sense.examples && sense.examples.length) {
-                        value = sense.examples.map(OED.parseExamples).join('\n');
+                        value = sense.examples.map(OED.parseExample).join('\n');
                     }
                     attachment.fields.push({
                         title: `${registers}${OED.parseDefinitions(sense.definitions)}`,
@@ -179,7 +179,7 @@ const OED = {
                         if (subsense.examples && subsense.examples.length) {
                             // Examples
                             attachment.fields.push({
-                                value: subsense.examples.map(OED.parseExamples).join('\n'),
+                                value: subsense.examples.map(OED.parseExample).join('\n'),
                                 short: true,
                             });
                         }
