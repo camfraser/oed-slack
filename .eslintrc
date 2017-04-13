@@ -1,0 +1,17 @@
+{
+    "extends": "airbnb-base",
+    "plugins": [
+        "mocha"
+    ],
+    "env": {
+        "node": true,
+        "es6": true,
+        "mocha": true
+    },
+    "rules": {
+        "indent": ["error", 4],
+        "no-underscore-dangle": ["error", { "allow": [] }],
+        "max-len": ["warn", 180],
+        "no-plusplus": 0
+    }
+}
