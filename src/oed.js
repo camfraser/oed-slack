@@ -4,9 +4,11 @@ const Redis = require('redis');
 const URL = require('url');
 if (process.env.NODE_ENV !== 'production') require('dotenv').config();
 
-const redisURI = URL.parse(process.env.REDIS_URL);
-
-const redisClient = Redis.createClient({ host: redisURI.hostname });
+const redisURL = URL.parse(process.env.REDIS_URL);
+const redisClient = Redis.createClient(redisURL.port, redisURL.hostname, { no_ready_check: true });
+if (redisURL.auth) {
+    redisClient.auth(redisURL.auth.split(':')[1]);
+}
 
 const OED_API_URL = process.env.OED_API_URL;
 const OED_APPLICATION_ID = process.env.OED_APPLICATION_ID;
