@@ -1,6 +1,23 @@
 const Logger = require('./logger');
-const Oed = require('./oed');
 const Request = require('request');
+const Redis = require('redis');
+const URL = require('url');
+if (process.env.NODE_ENV !== 'production') require('dotenv').config();
+
+const REDIS_URL = process.env.REDIS_URL || process.env.REDISTOGO_URL ||  process.env.REDISCLOUD_URL;
+const redisURL = URL.parse(REDIS_URL);
+let redisClient;
+try {
+    redisClient = Redis.createClient(redisURL.port, redisURL.hostname, { no_ready_check: true });
+    if (redisURL.auth) {
+        redisClient.auth(redisURL.auth.split(':')[1]);
+    }
+} catch (e) {
+    Logger(e, 'Could not connect to redis');
+    redisClient = { ready: false };
+}
+
+const Oed = require('./oed')(redisClient);
 
 module.exports = {
     index: {

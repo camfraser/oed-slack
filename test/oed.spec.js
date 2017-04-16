@@ -10,8 +10,7 @@ describe('OED', () => {
         };
         this.OED = proxyquire('../src/oed', {
             logger: sinon.stub(),
-            redis: this.mockRedis,
-        });
+        })(this.mockRedis);
     });
 
     describe('Formatting', () => {

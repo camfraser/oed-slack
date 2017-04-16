@@ -1,20 +1,7 @@
 const Request = require('request');
 const Logger = require('./logger');
-const Redis = require('redis');
-const URL = require('url');
 if (process.env.NODE_ENV !== 'production') require('dotenv').config();
 
-const redisURL = URL.parse(process.env.REDIS_URL);
-let redisClient;
-try {
-    redisClient = Redis.createClient(redisURL.port, redisURL.hostname, { no_ready_check: true });
-    if (redisURL.auth) {
-        redisClient.auth(redisURL.auth.split(':')[1]);
-    }
-} catch (e) {
-    Logger(e, 'Could not connect to redis');
-    redisClient = { ready: false };
-}
 const OED_API_URL = process.env.OED_API_URL;
 const OED_APPLICATION_ID = process.env.OED_APPLICATION_ID;
 const OED_APPLICATION_KEY = process.env.OED_APPLICATION_KEY;
@@ -34,169 +21,169 @@ To get a complete definition for a word, use the command: \`/oed defn <word>\`
 \`/oed d tor\`
 \`/oed definition tor\`
 `;
-const REDIS_PREFIX = process.env.REDIS_PREFIX || 'oed-slack:';
-const REDIS_TTL = process.env.REDIS_TTL || 60 * 60 * 24;
+const OED_REDIS_PREFIX = process.env.OED_REDIS_PREFIX || 'oed-slack:';
+const OED_REDIS_TTL = process.env.OED_REDIS_TTL || 60 * 60 * 24;
 
-const OED = {
-    bold(value) {
-        return `*${value}*`;
-    },
+module.exports = (redisClient) => {
+    const OED = {
+        bold(value) {
+            return `*${value}*`;
+        },
 
-    getDefinition(definition, callback, skipRedis = false) {
-        const redisKey = `${REDIS_PREFIX}${definition}`;
-        if (!skipRedis && redisClient.ready) {
-            Logger(redisKey, 'getting redis');
-            redisClient.get(redisKey, (err, output) => {
-                if (err || !output) {
-                    Logger({ err, output }, 'No redis entry found');
-                    return OED.getDefinition(definition, callback, true);
-                }
-                Logger('redis entry found');
-                return callback(200, JSON.parse(output));
-            });
-        } else {
-            const oedUrl = `${OED_API_URL}${encodeURIComponent(definition)}`;
-            const options = {
-                headers: {
-                    Accept: 'application/json',
-                    app_id: OED_APPLICATION_ID,
-                    app_key: OED_APPLICATION_KEY,
-                },
-            };
-            Request.get(oedUrl, options, (err, res, body) => {
-                if (res.statusCode && res.statusCode === 404) {
-                    return callback(404, `No results found for ${definition}`);
-                } else if (err || res.statusCode !== 200) {
-                    return callback(res.statusCode, `Error: ${err}`);
-                }
-                let entry;
-                try {
-                    entry = JSON.parse(body);
-                } catch (e) {
-                    Logger(e, 'e');
-                    return callback(500, 'Couldn\'t parse JSON in response from OED');
-                }
-                const result = entry.results[0];
-                const output = {
-                    attachments: [],
-                    username: BOT_NAME,
-                    icon_url: BOT_ICON,
+        getDefinition(definition, callback, skipRedis = false) {
+            const redisKey = `${OED_REDIS_PREFIX}${definition}`;
+            if (!skipRedis && redisClient.ready) {
+                Logger(redisKey, 'getting redis');
+                redisClient.get(redisKey, (err, output) => {
+                    if (err || !output) {
+                        Logger({ err, output }, 'No redis entry found');
+                        return OED.getDefinition(definition, callback, true);
+                    }
+                    Logger('redis entry found');
+                    return callback(200, JSON.parse(output));
+                });
+            } else {
+                const oedUrl = `${OED_API_URL}${encodeURIComponent(definition)}`;
+                const options = {
+                    headers: {
+                        Accept: 'application/json',
+                        app_id: OED_APPLICATION_ID,
+                        app_key: OED_APPLICATION_KEY,
+                    },
                 };
-                let attachmentCount = 0;
-                let pronunciation;
-                if (result.pronunciations && result.pronunciations.length) {
-                    pronunciation = result.pronunciations[0];
-                }
-                for (let e = 0; e < result.lexicalEntries.length; e++) {
-                    if (attachmentCount < ATTACHMENT_LIMIT) {
-                        output.attachments.push(OED.processEntry(result.lexicalEntries[e], pronunciation));
+                Request.get(oedUrl, options, (err, res, body) => {
+                    if (res.statusCode && res.statusCode === 404) {
+                        return callback(404, `No results found for ${definition}`);
+                    } else if (err || res.statusCode !== 200) {
+                        return callback(res.statusCode, `Error: ${err}`);
                     }
-                    attachmentCount++;
-                }
-                if (!attachmentCount) {
-                    output.text = result.word;
-                }
-                if (redisClient.ready) {
-                    Logger(redisKey, 'setting redis');
-                    redisClient.set(redisKey, JSON.stringify(output), 'EX', REDIS_TTL);
-                }
-                return callback(200, output);
-            });
-        }
-    },
-
-    helpText() {
-        return HELP_TEXT;
-    },
-
-    italicize(value) {
-        return `_${value}_`;
-    },
-
-    parseDefinitions(definitions) {
-        return definitions.join('\n');
-    },
-
-    parseExample(example) {
-        let resp = example.text;
-        if (example.registers) {
-            resp = `${OED.parseRegisters(example.registers)} ${resp}`;
-        }
-        return OED.italicize(resp);
-    },
-
-    parseRegisters(registers) {
-        return `(${registers.join(',')})`;
-    },
-
-    processEntry(lexicalEntry, pronunciation = null) {
-        if (!pronunciation && lexicalEntry.pronunciations && lexicalEntry.pronunciations.length) {
-            pronunciation = lexicalEntry.pronunciations[0]; // eslint-line-disable no-param-reassign
-        }
-        const attachment = {
-            pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}`,
-            fallback: `${lexicalEntry.text}, ${lexicalEntry.lexicalCategory}`,
-            fields: [],
-            mrkdwn_in: ['pretext', 'fields'],
-        };
-        if (pronunciation) {
-            if (pronunciation.audioFile) {
-                attachment.footer = pronunciation.audioFile;
-                attachment.footer_icon = AUDIO_ICON;
-            }
-            if (pronunciation.phoneticSpelling) {
-                attachment.pretext = `${attachment.pretext}, ${OED.italicize(pronunciation.phoneticSpelling)}`;
-                attachment.fallback = `${attachment.fallback}, ${pronunciation.phoneticSpelling}`;
-            }
-        }
-        for (let e = 0; e < lexicalEntry.entries.length; e++) {
-            const entry = lexicalEntry.entries[e];
-            if (entry.etymologies && entry.etymologies.length) {
-                attachment.fields.push({ value: `:books: ${entry.etymologies.join('\n:books: ')}` });
-            }
-            for (let s = 0; s < entry.senses.length; s++) {
-                const sense = entry.senses[s];
-                // Definition
-                if (sense.definitions && sense.definitions.length) {
-                    let registers = '';
-                    if (sense.registers && sense.registers.length) {
-                        registers = `${OED.parseRegisters(sense.registers)} `;
+                    let entry;
+                    try {
+                        entry = JSON.parse(body);
+                    } catch (e) {
+                        Logger(e, 'e');
+                        return callback(500, 'Couldn\'t parse JSON in response from OED');
                     }
-                    let value = '';
-                    if (sense.examples && sense.examples.length) {
-                        value = sense.examples.map(OED.parseExample).join('\n');
+                    const result = entry.results[0];
+                    const output = {
+                        attachments: [],
+                        username: BOT_NAME,
+                        icon_url: BOT_ICON,
+                    };
+                    let attachmentCount = 0;
+                    let pronunciation;
+                    if (result.pronunciations && result.pronunciations.length) {
+                        pronunciation = result.pronunciations[0];
                     }
-                    attachment.fields.push({
-                        title: `${registers}${OED.parseDefinitions(sense.definitions)}`,
-                        value,
-                        short: false,
-                    });
+                    for (let e = 0; e < result.lexicalEntries.length; e++) {
+                        if (attachmentCount < ATTACHMENT_LIMIT) {
+                            output.attachments.push(OED.processEntry(result.lexicalEntries[e], pronunciation));
+                        }
+                        attachmentCount++;
+                    }
+                    if (!attachmentCount) {
+                        output.text = result.word;
+                    }
+                    if (redisClient.ready) {
+                        Logger(redisKey, 'setting redis');
+                        redisClient.set(redisKey, JSON.stringify(output), 'EX', OED_REDIS_TTL);
+                    }
+                    return callback(200, output);
+                });
+            }
+        },
+
+        helpText() {
+            return HELP_TEXT;
+        },
+
+        italicize(value) {
+            return `_${value}_`;
+        },
+
+        parseDefinitions(definitions) {
+            return definitions.join('\n');
+        },
+
+        parseExample(example) {
+            let resp = example.text;
+            if (example.registers) {
+                resp = `${OED.parseRegisters(example.registers)} ${resp}`;
+            }
+            return OED.italicize(resp);
+        },
+
+        parseRegisters(registers) {
+            return `(${registers.join(',')})`;
+        },
+
+        processEntry(lexicalEntry, pronunciation = null) {
+            if (!pronunciation && lexicalEntry.pronunciations && lexicalEntry.pronunciations.length) {
+                pronunciation = lexicalEntry.pronunciations[0]; // eslint-line-disable no-param-reassign
+            }
+            const attachment = {
+                pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}`,
+                fallback: `${lexicalEntry.text}, ${lexicalEntry.lexicalCategory}`,
+                fields: [],
+                mrkdwn_in: ['pretext', 'fields'],
+            };
+            if (pronunciation) {
+                if (pronunciation.audioFile) {
+                    attachment.footer = pronunciation.audioFile;
+                    attachment.footer_icon = AUDIO_ICON;
                 }
-                if (sense.subsenses && sense.subsenses.length) {
-                    for (let b = 0; b < sense.subsenses.length; b++) {
-                        const subsense = sense.subsenses[b];
-                        let subRegisters = '';
-                        if (subsense.registers && subsense.registers.length) {
-                            subRegisters = `${OED.italicize(OED.parseRegisters(subsense.registers))} `;
+                if (pronunciation.phoneticSpelling) {
+                    attachment.pretext = `${attachment.pretext}, ${OED.italicize(pronunciation.phoneticSpelling)}`;
+                    attachment.fallback = `${attachment.fallback}, ${pronunciation.phoneticSpelling}`;
+                }
+            }
+            for (let e = 0; e < lexicalEntry.entries.length; e++) {
+                const entry = lexicalEntry.entries[e];
+                if (entry.etymologies && entry.etymologies.length) {
+                    attachment.fields.push({ value: `:books: ${entry.etymologies.join('\n:books: ')}` });
+                }
+                for (let s = 0; s < entry.senses.length; s++) {
+                    const sense = entry.senses[s];
+                    // Definition
+                    if (sense.definitions && sense.definitions.length) {
+                        let registers = '';
+                        if (sense.registers && sense.registers.length) {
+                            registers = `${OED.parseRegisters(sense.registers)} `;
+                        }
+                        let value = '';
+                        if (sense.examples && sense.examples.length) {
+                            value = sense.examples.map(OED.parseExample).join('\n');
                         }
                         attachment.fields.push({
-                            value: `${subRegisters}${OED.parseDefinitions(subsense.definitions)}`,
-                            short: (subsense.examples && subsense.examples.length),
+                            title: `${registers}${OED.parseDefinitions(sense.definitions)}`,
+                            value,
+                            short: false,
                         });
-                        if (subsense.examples && subsense.examples.length) {
-                            // Examples
+                    }
+                    if (sense.subsenses && sense.subsenses.length) {
+                        for (let b = 0; b < sense.subsenses.length; b++) {
+                            const subsense = sense.subsenses[b];
+                            let subRegisters = '';
+                            if (subsense.registers && subsense.registers.length) {
+                                subRegisters = `${OED.italicize(OED.parseRegisters(subsense.registers))} `;
+                            }
                             attachment.fields.push({
-                                value: subsense.examples.map(OED.parseExample).join('\n'),
-                                short: true,
+                                value: `${subRegisters}${OED.parseDefinitions(subsense.definitions)}`,
+                                short: (subsense.examples && subsense.examples.length),
                             });
+                            if (subsense.examples && subsense.examples.length) {
+                                // Examples
+                                attachment.fields.push({
+                                    value: subsense.examples.map(OED.parseExample).join('\n'),
+                                    short: true,
+                                });
+                            }
                         }
                     }
                 }
             }
-        }
-        return attachment;
-    },
+            return attachment;
+        },
+    };
+    return OED;
 };
-
-
-module.exports = OED;
