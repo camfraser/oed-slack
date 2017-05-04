@@ -1,7 +1,7 @@
 const Hapi = require('hapi');
 const Logger = require('./logger');
 const routes = require('./routes');
-if (process.env.NODE_ENV !== 'production') require('dotenv').config();
+require('dotenv').config();
 
 const server = new Hapi.Server();
 

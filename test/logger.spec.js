@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 const sinon = require('sinon');
 const expect = require('code').expect;
 const proxyquire = require('proxyquire');
@@ -17,7 +18,7 @@ describe('Logger', () => {
         });
     });
 
-    afterEach(function ae() {
+    afterEach(() => {
         console.log.restore();
     });
 

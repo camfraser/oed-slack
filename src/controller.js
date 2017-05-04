@@ -2,9 +2,9 @@ const Logger = require('./logger');
 const Request = require('request');
 const Redis = require('redis');
 const URL = require('url');
-if (process.env.NODE_ENV !== 'production') require('dotenv').config();
+require('dotenv').config();
 
-const REDIS_URL = process.env.REDIS_URL || process.env.REDISTOGO_URL ||  process.env.REDISCLOUD_URL;
+const REDIS_URL = process.env.REDIS_URL || process.env.REDISTOGO_URL || process.env.REDISCLOUD_URL;
 const redisURL = URL.parse(REDIS_URL);
 let redisClient;
 try {

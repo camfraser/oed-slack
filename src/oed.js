@@ -1,6 +1,6 @@
 const Request = require('request');
 const Logger = require('./logger');
-if (process.env.NODE_ENV !== 'production') require('dotenv').config();
+require('dotenv').config();
 
 const OED_API_URL = process.env.OED_API_URL;
 const OED_APPLICATION_ID = process.env.OED_APPLICATION_ID;
@@ -117,9 +117,10 @@ module.exports = (redisClient) => {
             return `(${registers.join(',')})`;
         },
 
-        processEntry(lexicalEntry, pronunciation = null) {
+        processEntry(lexicalEntry, pronounce = null) {
+            let pronunciation = pronounce;
             if (!pronunciation && lexicalEntry.pronunciations && lexicalEntry.pronunciations.length) {
-                pronunciation = lexicalEntry.pronunciations[0]; // eslint-line-disable no-param-reassign
+                pronunciation = lexicalEntry.pronunciations[0];
             }
             const attachment = {
                 pretext: `${OED.bold(lexicalEntry.text)}, ${lexicalEntry.lexicalCategory}`,
