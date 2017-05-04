@@ -30,7 +30,7 @@ Server is running at http://localhost:2345
 ## Local Development
 
 ```
-$ PORT=2345 npm lt
+$ PORT=2345 npm run lt
 your url is: https://krletcmtsg.localtunnel.me
 ```
 
